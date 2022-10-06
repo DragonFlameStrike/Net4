@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	e "github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -65,8 +64,7 @@ func MulticastUDPSender(a string) {
 	}()
 }
 
-func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGames)) (CurrentGames, error) {
-	cg := CurrentGames{gamesSrc: []*net.UDPAddr{}}
+func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGames), cg CurrentGames) {
 	addr, err := net.ResolveUDPAddr("udp", a)
 	if err != nil {
 		log.Fatal(err)
@@ -74,10 +72,9 @@ func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGam
 	l, err := net.ListenMulticastUDP("udp", nil, addr)
 	err = l.SetReadBuffer(maxDatagramSize)
 	if err != nil {
-		return cg, errors.New("SetReadBuffer error")
+		return
 	}
-	start := time.Now()
-	for time.Since(start) < time.Second*2 {
+	for {
 		b := make([]byte, maxDatagramSize)
 		n, src, err := l.ReadFromUDP(b)
 		if err != nil {
@@ -85,7 +82,6 @@ func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGam
 		}
 		h(src, n, b, cg)
 	}
-	return cg, nil
 }
 
 func msgHandler(src *net.UDPAddr, n int, b []byte, cg CurrentGames) {
@@ -107,11 +103,9 @@ func createGame() {
 }
 
 func findGames() {
-	go printWaitGames()
-	cg, err := MulticastUDPListener(srvAddr, msgHandler)
-	if err != nil {
-		return
-	}
+	cg := CurrentGames{gamesSrc: []*net.UDPAddr{}}
+	go MulticastUDPListener(srvAddr, msgHandler, cg)
+	printWaitGames()
 	if len(cg.gamesSrc) == 0 {
 		fmt.Println("NO GAMES")
 		return

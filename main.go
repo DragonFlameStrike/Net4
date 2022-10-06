@@ -64,7 +64,7 @@ func MulticastUDPSender(a string) {
 	}()
 }
 
-func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGames), cg CurrentGames) {
+func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, *CurrentGames), cg *CurrentGames) {
 	addr, err := net.ResolveUDPAddr("udp", a)
 	if err != nil {
 		log.Fatal(err)
@@ -84,12 +84,11 @@ func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGam
 	}
 }
 
-func msgHandler(src *net.UDPAddr, n int, b []byte, cg CurrentGames) {
+func msgHandler(src *net.UDPAddr, n int, b []byte, cg *CurrentGames) {
 	message := string(b[:n])
-	log.Println(string(b[:n]) + " " + src.String())
 	if message == AnnouncementMsg {
 		for _, addr := range cg.gamesSrc {
-			if addr == src {
+			if addr.String() == src.String() {
 				return
 			}
 		}
@@ -104,7 +103,7 @@ func createGame() {
 
 func findGames() {
 	cg := CurrentGames{gamesSrc: []*net.UDPAddr{}}
-	go MulticastUDPListener(srvAddr, msgHandler, cg)
+	go MulticastUDPListener(srvAddr, msgHandler, &cg)
 	printWaitGames()
 	if len(cg.gamesSrc) == 0 {
 		fmt.Println("NO GAMES")
@@ -116,7 +115,7 @@ func findGames() {
 }
 
 func connectToTheGame(game *net.UDPAddr) {
-	fmt.Println("Trying connect to: " + game.IP.String())
+	fmt.Println("Trying connect to: " + game.String())
 	time.Sleep(100 * time.Second)
 }
 
@@ -155,7 +154,8 @@ func printMainMenu() {
 func printChooseGameMenu(cg CurrentGames) {
 	fmt.Println("Choose a game")
 	for i, addr := range cg.gamesSrc {
-		fmt.Println(string(i+1) + "." + " " + addr.IP.String())
+		fmt.Print(i + 1)
+		fmt.Println(". " + addr.String())
 	}
 }
 

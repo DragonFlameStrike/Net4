@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 	e "github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -33,8 +32,8 @@ func main() {
 	case CLOSE:
 		os.Exit(CLOSE)
 	case CREATE:
-		createGame()
 		go UDPSender(srvAddr)
+		createGame()
 	case CONNECT:
 		go MulticastUDPListener(srvAddr, msgHandler)
 		findGames()
@@ -63,7 +62,7 @@ func MulticastUDPSender(a string) {
 }
 
 func msgHandler(src *net.UDPAddr, n int, b []byte) {
-	log.Println(hex.Dump(b[:n]))
+	log.Println(string(b[:n]) + " " + src.String())
 }
 
 func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte)) {
@@ -88,10 +87,11 @@ func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte)) {
 
 func createGame() {
 	e.Run(update, 800, 600, 1, "Snakes")
+	time.Sleep(100 * time.Second)
 }
 
 func findGames() {
-
+	time.Sleep(100 * time.Second)
 }
 
 func getConsoleStartChoose() int {

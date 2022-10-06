@@ -18,6 +18,7 @@ const (
 	srvAddr         = "239.192.0.4:9192"
 	maxDatagramSize = 8192
 )
+const AnnouncementMsg = "AnnouncementMsg"
 
 func update(screen *e.Image) error {
 	img, _, _ := ebitenutil.NewImageFromFile("./images/BackGround.png", e.FilterDefault)
@@ -28,39 +29,44 @@ func update(screen *e.Image) error {
 func main() {
 	greetingsMainMenu()
 	c := getConsoleStartChoose()
-	go serveMulticastUDP(srvAddr, msgHandler)
-	go ping(srvAddr, "hello")
 	switch c {
 	case CLOSE:
-		os.Exit(1)
+		os.Exit(CLOSE)
 	case CREATE:
 		createGame()
+		go UDPSender(srvAddr)
 	case CONNECT:
+		go MulticastUDPListener(srvAddr, msgHandler)
 		findGames()
 	}
 }
 
-func ping(a string, massage string) {
+func UDPSender(adr string) {
+	MulticastUDPSender(adr)
+}
+
+func MulticastUDPSender(a string) {
 	addr, err := net.ResolveUDPAddr("udp", a)
 	if err != nil {
 		log.Fatal(err)
 	}
 	c, err := net.DialUDP("udp", nil, addr)
-	for i := 1; i < 1000; i++ {
-		if err != nil {
-			fmt.Println("Error listening:", err)
-			os.Exit(1)
-		}
-		c.Write([]byte(massage))
-		time.Sleep(5 * time.Second)
+	if err != nil {
+		log.Fatal(err)
 	}
+	go func() {
+		for {
+			c.Write([]byte(AnnouncementMsg))
+			time.Sleep(time.Second)
+		}
+	}()
 }
 
 func msgHandler(src *net.UDPAddr, n int, b []byte) {
 	log.Println(hex.Dump(b[:n]))
 }
 
-func serveMulticastUDP(a string, h func(*net.UDPAddr, int, []byte)) {
+func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte)) {
 	addr, err := net.ResolveUDPAddr("udp", a)
 	if err != nil {
 		log.Fatal(err)

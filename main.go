@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	e "github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -19,6 +20,10 @@ const (
 )
 const AnnouncementMsg = "AnnouncementMsg"
 
+type CurrentGames struct {
+	gamesSrc []*net.UDPAddr
+}
+
 func update(screen *e.Image) error {
 	img, _, _ := ebitenutil.NewImageFromFile("./images/BackGround.png", e.FilterDefault)
 	screen.DrawImage(img, nil)
@@ -26,7 +31,7 @@ func update(screen *e.Image) error {
 }
 
 func main() {
-	greetingsMainMenu()
+	printMainMenu()
 	c := getConsoleStartChoose()
 	switch c {
 	case CLOSE:
@@ -35,7 +40,6 @@ func main() {
 		go UDPSender(srvAddr)
 		createGame()
 	case CONNECT:
-		go MulticastUDPListener(srvAddr, msgHandler)
 		findGames()
 	}
 }
@@ -61,11 +65,8 @@ func MulticastUDPSender(a string) {
 	}()
 }
 
-func msgHandler(src *net.UDPAddr, n int, b []byte) {
-	log.Println(string(b[:n]) + " " + src.String())
-}
-
-func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte)) {
+func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte, CurrentGames)) (CurrentGames, error) {
+	cg := CurrentGames{gamesSrc: []*net.UDPAddr{}}
 	addr, err := net.ResolveUDPAddr("udp", a)
 	if err != nil {
 		log.Fatal(err)
@@ -73,15 +74,30 @@ func MulticastUDPListener(a string, h func(*net.UDPAddr, int, []byte)) {
 	l, err := net.ListenMulticastUDP("udp", nil, addr)
 	err = l.SetReadBuffer(maxDatagramSize)
 	if err != nil {
-		return
+		return cg, errors.New("SetReadBuffer error")
 	}
-	for {
+	start := time.Now()
+	for time.Since(start) < time.Second*2 {
 		b := make([]byte, maxDatagramSize)
 		n, src, err := l.ReadFromUDP(b)
 		if err != nil {
 			log.Fatal("ReadFromUDP failed:", err)
 		}
-		h(src, n, b)
+		h(src, n, b, cg)
+	}
+	return cg, nil
+}
+
+func msgHandler(src *net.UDPAddr, n int, b []byte, cg CurrentGames) {
+	message := string(b[:n])
+	log.Println(string(b[:n]) + " " + src.String())
+	if message == AnnouncementMsg {
+		for _, addr := range cg.gamesSrc {
+			if addr == src {
+				return
+			}
+		}
+		cg.gamesSrc = append(cg.gamesSrc, src)
 	}
 }
 
@@ -91,6 +107,22 @@ func createGame() {
 }
 
 func findGames() {
+	go printWaitGames()
+	cg, err := MulticastUDPListener(srvAddr, msgHandler)
+	if err != nil {
+		return
+	}
+	if len(cg.gamesSrc) == 0 {
+		fmt.Println("NO GAMES")
+		return
+	}
+	printChooseGameMenu(cg)
+	gn := getConsoleGameChoose(len(cg.gamesSrc))
+	connectToTheGame(cg.gamesSrc[gn])
+}
+
+func connectToTheGame(game *net.UDPAddr) {
+	fmt.Println("Trying connect to: " + game.IP.String())
 	time.Sleep(100 * time.Second)
 }
 
@@ -106,10 +138,41 @@ func getConsoleStartChoose() int {
 	}
 }
 
-func greetingsMainMenu() {
+func getConsoleGameChoose(r int) int {
+	for {
+		c := -1
+		fmt.Fscan(os.Stdin, &c)
+		if c > r || c < 0 {
+			fmt.Println("Wrong input")
+			continue
+		}
+		return c - 1
+	}
+}
+
+func printMainMenu() {
 	fmt.Println("Hello User!")
 	fmt.Println("Choose what you want:")
 	fmt.Println("1. Create a new game")
 	fmt.Println("2. Connect to the game")
 	fmt.Println("0. Close the game")
+}
+
+func printChooseGameMenu(cg CurrentGames) {
+	fmt.Println("Choose a game")
+	for i, addr := range cg.gamesSrc {
+		fmt.Println(string(i+1) + "." + " " + addr.IP.String())
+	}
+}
+
+func printWaitGames() {
+	fmt.Println("finding games...")
+	time.Sleep(time.Second / 2)
+	fmt.Println("35%...")
+	time.Sleep(time.Second / 3)
+	fmt.Println("75%...")
+	time.Sleep(time.Second / 3)
+	fmt.Println("99%...")
+	time.Sleep(time.Second)
+	fmt.Println("done!")
 }
